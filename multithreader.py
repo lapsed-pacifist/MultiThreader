@@ -8,7 +8,7 @@ class PrintThread(threading.Thread):
 		self.queue = queue
 	
 	def write(self, p):
-		print p
+		print '[{}] {}'.format(*p)
 
 	def run(self):
 		while True:
@@ -21,22 +21,29 @@ class WriteThread(PrintThread):
 		super(WriteThread, self).__init__(queue)
 		self.fname = fname
 
-	# def write(self, p):
-	# 	with open(self.fname, 'a') as f:
-	# 		f.write(u'{}\n'.format(p).encode('utf-8'))
+	def write(self, p):
+		with open(self.fname, 'a') as f:
+			f.write(u'{}\n'.format(p).encode('utf-8'))
 
 class ProcessThread(threading.Thread):
-	def __init__(self, in_queue, out_queue, process_function=lambda task: 1/0):
+	def __init__(self, in_queue, out_queue, display_queue, process_function):
 		super(ProcessThread, self).__init__()
 		self.in_queue = in_queue
 		self.out_queue = out_queue
 		self.process = process_function
+		self.display_queue = display_queue
 
 	def run(self):
 		while True:
 			path = self.in_queue.get()
 			try:
-				result = self.process(path)
+				output = self.process(path)
+				try:
+					result, print_out = output
+					if self.display_queue is not None:
+						self.display_queue.put([print_out, self.name])
+				except (ValueError, TypeError) as err:
+					result = output
 				self.out_queue.put(result)
 				self.in_queue.task_done()
 			except:
@@ -58,7 +65,7 @@ if __name__ == '__main__':
 	# spawn threads to process
 	workers = []
 	for i in range(0, 5):
-		t = ProcessThread(TaskQueue, ResultQueue)
+		t = ProcessThread(TaskQueue, ResultQueue, display_queue=None, process_function=lambda task: (task, task))
 		t.setDaemon(True)
 		workers.append(t)
 		t.start()
@@ -75,3 +82,4 @@ if __name__ == '__main__':
 	# wait for queues to get empty
 	TaskQueue.join()
 	ResultQueue.join()
+	# PrintQueue.join()
